@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ECOVELA · Gira y gana</title>
+<style>
+:root{
+  --sage:#7d8f68; --sage-dark:#536445; --cream:#fbf7ed;
+  --kraft:#c8a978; --brown:#8a6540; --white:#fffdf8;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; min-height:100vh; font-family:Arial,Helvetica,sans-serif;
+  color:var(--brown);
+  background:linear-gradient(180deg,#fffdf8 0%,#f4eee2 100%);
+}
+.wrap{max-width:520px;margin:auto;padding:24px 16px 36px}
+.brand{text-align:center}
+.logo-mark{
+  width:70px;height:70px;margin:0 auto 8px;border:3px solid var(--sage);
+  border-radius:50%;display:grid;place-items:center;font-size:31px;background:#fff;
+}
+.brand h1{margin:0;color:var(--sage-dark);letter-spacing:3px;font-size:31px}
+.tag{margin:5px 0 18px;font-size:14px;letter-spacing:2px}
+.card{
+  background:rgba(255,253,248,.94); border:2px solid #ded3bd;
+  border-radius:24px; padding:20px; box-shadow:0 8px 24px rgba(91,70,43,.09);
+}
+h2{text-align:center;color:var(--sage-dark);margin:0 0 8px;font-size:25px}
+.intro{text-align:center;line-height:1.5;margin:0 auto 18px;max-width:390px}
+label{display:block;font-weight:700;margin:12px 0 6px}
+input{
+  width:100%;padding:14px;border:1.5px solid #cdbd9f;border-radius:12px;
+  font-size:16px;background:#fff;
+}
+button{
+  width:100%;border:0;border-radius:14px;padding:15px;margin-top:15px;
+  background:var(--sage-dark);color:#fff;font-size:17px;font-weight:800;
+  cursor:pointer;box-shadow:0 4px 0 #3f4d34;
+}
+button:active{transform:translateY(2px);box-shadow:0 2px 0 #3f4d34}
+button:disabled{opacity:.55;cursor:not-allowed}
+.wheelbox{display:none;text-align:center}
+canvas{width:min(86vw,360px);height:min(86vw,360px);max-width:360px;max-height:360px}
+.pointer{
+  width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;
+  border-top:24px solid #8a6540;margin:-4px auto 8px;filter:drop-shadow(0 2px 1px #aaa);
+}
+.result{display:none;text-align:center;margin-top:18px;padding:18px;border-radius:18px;background:#eef2e8;border:1px solid #cbd5bf}
+.result .emoji{font-size:42px}.result h3{margin:6px 0;color:var(--sage-dark);font-size:24px}
+.code{display:inline-block;margin-top:8px;padding:9px 12px;background:#fff;border:1px dashed var(--sage-dark);border-radius:10px;font-weight:800;letter-spacing:1px}
+.note{font-size:12px;text-align:center;margin-top:16px;opacity:.75;line-height:1.45}
+.footer{text-align:center;margin-top:20px;font-size:12px;letter-spacing:1px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="logo-mark">🕯️</div>
+    <h1>ECOVELA</h1>
+    <div class="tag">ENCIENDE EL CAMBIO</div>
+  </div>
+
+  <section class="card" id="formCard">
+    <h2>🎡 ¡GIRA Y GANA!</h2>
+    <p class="intro">Participa en nuestra ruleta y descubre qué premio te espera. 💚</p>
+    <label for="name">Tu nombre</label>
+    <input id="name" maxlength="40" placeholder="Escribe tu nombre">
+    <button id="startBtn">Continuar a la ruleta</button>
+    <p class="note">Un giro por persona.</p>
+  </section>
+
+  <section class="card wheelbox" id="wheelCard">
+    <h2>Tu turno, <span id="player"></span> ✨</h2>
+    <div class="pointer"></div>
+    <canvas id="wheel" width="720" height="720"></canvas>
+    <button id="spinBtn">🎡 GIRAR LA RULETA</button>
+    <div class="result" id="result">
+      <div class="emoji" id="resultEmoji"></div>
+      <h3 id="resultTitle"></h3>
+      <div id="resultText"></div>
+      <div class="code" id="resultCode"></div>
+      <p class="note">Muestra esta pantalla en el stand de ECOVELA para reclamar tu premio.</p>
+    </div>
+  </section>
+
+  <div class="footer">🌿 Velas artesanales · Jabones naturales 🌿</div>
+</div>
+
+<script>
+const prizes = [
+  {label:"Mini vela", emoji:"🕯️", text:"¡Ganaste una mini vela gratis!", weight:5},
+  {label:"Mini jabón", emoji:"🧼", text:"¡Ganaste un mini jabón gratis!", weight:5},
+  {label:"10% OFF", emoji:"💚", text:"¡Ganaste 10% de descuento!", weight:5},
+  {label:"15% OFF", emoji:"🌿", text:"¡Ganaste 15% de descuento!", weight:5},
+  {label:"20% OFF", emoji:"✨", text:"¡Ganaste 20% de descuento!", weight:3},
+  {label:"Vuelve a girar", emoji:"🍀", text:"¡Tienes otra oportunidad! Puedes volver a girar.", weight:7}
+];
+
+// Esta versión funciona sin servidor y usa una sola participación por dispositivo.
+const storageKey="ecovela_has_spun_v1";
+const formCard=document.getElementById("formCard");
+const wheelCard=document.getElementById("wheelCard");
+const startBtn=document.getElementById("startBtn");
+const spinBtn=document.getElementById("spinBtn");
+const nameInput=document.getElementById("name");
+const player=document.getElementById("player");
+const canvas=document.getElementById("wheel");
+const ctx=canvas.getContext("2d");
+const TAU=Math.PI*2;
+
+function drawWheel(){
+  const cx=360, cy=360, r=340;
+  const total=prizes.reduce((s,p)=>s+p.weight,0);
+  let a=-Math.PI/2;
+  ctx.clearRect(0,0,720,720);
+  prizes.forEach((p,i)=>{
+    const sweep=TAU*p.weight/total;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,a,a+sweep); ctx.closePath();
+    ctx.fillStyle=["#7d8f68","#c8a978","#9bab86","#dfd5c2","#8a6540","#b8c5a8"][i];
+    ctx.fill(); ctx.strokeStyle="#fffdf8"; ctx.lineWidth=7; ctx.stroke();
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(a+sweep/2);
+    ctx.textAlign="right"; ctx.fillStyle="#fffdf8"; ctx.font="bold 27px Arial";
+    ctx.fillText(p.label,r-24,9); ctx.restore();
+    a+=sweep;
+  });
+  ctx.beginPath();ctx.arc(cx,cy,58,0,TAU);ctx.fillStyle="#fffdf8";ctx.fill();
+  ctx.strokeStyle="#536445";ctx.lineWidth=6;ctx.stroke();
+  ctx.fillStyle="#536445";ctx.font="bold 24px Arial";ctx.textAlign="center";ctx.fillText("ECOVELA",cx,8+cy);
+}
+drawWheel();
+
+let rotation=0, spinning=false;
+function pickPrize(){
+  const total=prizes.reduce((s,p)=>s+p.weight,0);
+  let n=Math.random()*total;
+  for(let i=0;i<prizes.length;i++){n-=prizes[i].weight;if(n<0)return i;}
+  return prizes.length-1;
+}
+function makeCode(){
+  return "ECO-"+Math.random().toString(36).slice(2,6).toUpperCase();
+}
+startBtn.onclick=()=>{
+  const n=nameInput.value.trim();
+  if(!n){nameInput.focus();return;}
+  if(localStorage.getItem(storageKey)){
+    alert("Este dispositivo ya participó. 💚");
+    return;
+  }
+  player.textContent=n;
+  formCard.style.display="none";
+  wheelCard.style.display="block";
+};
+spinBtn.onclick=()=>{
+  if(spinning)return;
+  spinning=true; spinBtn.disabled=true;
+  const index=pickPrize();
+  const total=prizes.reduce((s,p)=>s+p.weight,0);
+  let start=-Math.PI/2, targetStart=0;
+  for(let i=0;i<index;i++) start+=TAU*prizes[i].weight/total;
+  const sweep=TAU*prizes[index].weight/total;
+  const center=start+sweep/2;
+  const desired=-Math.PI/2-center;
+  const current=rotation%TAU;
+  let delta=desired-current;
+  while(delta<0)delta+=TAU;
+  rotation += delta + TAU*6;
+  const from=rotation-(delta+TAU*6), to=rotation, duration=4300, t0=performance.now();
+  function animate(t){
+    const x=Math.min(1,(t-t0)/duration), ease=1-Math.pow(1-x,4);
+    const ang=from+(to-from)*ease;
+    ctx.save();ctx.translate(360,360);ctx.rotate(ang);ctx.translate(-360,-360);drawWheel();ctx.restore();
+    if(x<1)requestAnimationFrame(animate); else finish(index);
+  }
+  requestAnimationFrame(animate);
+};
+function finish(index){
+  const p=prizes[index];
+  localStorage.setItem(storageKey,"1");
+  document.getElementById("resultEmoji").textContent=p.emoji;
+  document.getElementById("resultTitle").textContent=p.label;
+  document.getElementById("resultText").textContent=p.text;
+  document.getElementById("resultCode").textContent=makeCode();
+  document.getElementById("result").style.display="block";
+  spinBtn.textContent="Participación registrada ✓";
+}
+</script>
+</body>
+</html>
